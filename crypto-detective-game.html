@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Detective: The Integration Chase</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Courier New', monospace;
+            color: #33ff33;
+        }
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            margin: 0 auto;
+            background-color: #000;
+            border: 4px solid #33ff33;
+            box-shadow: 0 0 10px #33ff33;
+        }
+        canvas {
+            display: block;
+        }
+        #title-screen, #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #33ff33;
+            text-align: center;
+        }
+        h1 {
+            font-size: 36px;
+            margin: 0 0 20px;
+            text-shadow: 0 0 5px #33ff33;
+        }
+        h2 {
+            font-size: 24px;
+            margin: 10px 0;
+        }
+        .blink {
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+        .btn {
+            background-color: #000;
+            color: #33ff33;
+            border: 2px solid #33ff33;
+            padding: 10px 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            cursor: pointer;
+            margin: 10px;
+            text-shadow: 0 0 5px #33ff33;
+        }
+        .btn:hover {
+            background-color: #33ff33;
+            color: #000;
+        }
+        .instructions {
+            font-size: 16px;
+            margin: 20px;
+            max-width: 600px;
+            text-align: left;
+        }
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 16px;
+            text-shadow: 1px 1px 0 #000;
+        }
+        .red-flag {
+            color: #ff3333;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="hud">
+            <div id="score">SCORE: 0</div>
+            <div id="time">TIME: 60</div>
+            <div id="flags">RED FLAGS: 0</div>
+        </div>
+        <div id="title-screen">
+            <h1>CRYPTO DETECTIVE</h1>
+            <h2>The Integration Chase</h2>
+            <p class="instructions">
+                You are a blockchain investigator tracking crypto as it moves through the laundering process.<br><br>
+                - Use <strong>ARROW KEYS</strong> to move the detective<br>
+                - Collect <strong>GOLD BITCOINS</strong> that move through the maze and teleport at bridges<br>
+                - Cross <strong>BRIDGES</strong> (on/off ramps) to access different areas<br>
+                - Collect <strong>RED FLAGS</strong> to slow down the bandit<br>
+                - If the bandit catches you, you lose points<br>
+                - Race against the clock - you have 60 seconds!
+            </p>
+            <button id="start-btn" class="btn">START GAME</button>
+            <p class="blink">PRESS ENTER TO START</p>
+        </div>
+        <div id="game-over-screen" style="display: none;">
+            <h1>GAME OVER</h1>
+            <h2 id="final-score">YOUR SCORE: 0</h2>
+            <h2 id="final-message">TRY AGAIN!</h2>
+            <button id="restart-btn" class="btn">PLAY AGAIN</button>
+            <p class="blink">PRESS ENTER TO RESTART</p>
+        </div>
+    </div>
+
+    <script>
+        // Game variables
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const titleScreen = document.getElementById('title-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const scoreDisplay = document.getElementById('score');
+        const timeDisplay = document.getElementById('time');
+        const flagsDisplay = document.getElementById('flags');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const finalMessageDisplay = document.getElementById('final-message');
+        
+        let gameStarted = false;
+        let gameOver = false;
+        let score = 0;
+        let timeLeft = 60;
+        let flagsCollected = 0;
+        let timer;
+        
+        // Grid size for maze
+        const CELL_SIZE = 40;
+        const GRID_WIDTH = Math.floor(canvas.width / CELL_SIZE);
+        const GRID_HEIGHT = Math.floor(canvas.height / CELL_SIZE);
+        
+        // Colors
+        const COLORS = {
+            wall: '#555555',
+            path: '#000080',
+            detective: '#33ff33',
+            bandit: '#ff3333',
+            coin: '#FFD700',
+            redFlag: '#ff3333',
+            bridge: '#8B4513'
+        };
+        
+        // Game objects
+        let maze = [];
+        let detective = { x: 1, y: 1, dir: 'right', moveDelay: 0 };
+        let bandits = [];
+        let coins = [];
+        let redFlags = [];
+        let bridges = [];
+        
+        // Directions for movement
+        const DIRECTIONS = ['up', 'right', 'down', 'left'];
+        
+        // Key states
+        const keys = {
+            ArrowUp: false,
+            ArrowRight: false,
+            ArrowDown: false,
+            ArrowLeft: false
+        };
+        
+        // Initialize game
+        function initGame() {
+            // Reset game state
+            score = 0;
+            timeLeft = 60;
+            flagsCollected = 0;
+            gameStarted = true;
+            gameOver = false;
+            
+            // Generate maze
+            generateMaze();
+            
+            // Place detective
+            detective = { x: 1, y: 1, dir: 'right', moveDelay: 0 };
+            
+            // Place just one bandit
+            bandits = [
+                { x: GRID_WIDTH - 2, y: GRID_HEIGHT - 2, dir: 'left', moveDelay: 0, slowed: false }
+            ];
+            
+            // Place coins, bridges, and red flags
+            placeCoins();
+            placeBridges();
+            placeRedFlags();
+            
+            // Start the game timer
+            clearInterval(timer);
+            timer = setInterval(() => {
+                if (!gameOver) {
+                    timeLeft--;
+                    timeDisplay.textContent = `TIME: ${timeLeft}`;
+                    
+                    if (timeLeft <= 0) {
+                        endGame();
+                    }
+                    
+                    // Add a new coin occasionally
+                    if (timeLeft % 5 === 0 && coins.length < 15) {
+                        placeCoin();
+                    }
+                    
+                    // Reset bandit slow effect
+                    bandits.forEach(bandit => {
+                        if (bandit.slowed) {
+                            bandit.slowed = false;
+                        }
+                    });
+                }
+            }, 1000);
+            
+            // Hide title screen
+            titleScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            
+            // Start game loop
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Generate maze
+        function generateMaze() {
+            // Initialize maze with walls
+            maze = Array(GRID_HEIGHT).fill().map(() => Array(GRID_WIDTH).fill(1));
+            
+            // Create paths
+            for (let y = 1; y < GRID_HEIGHT - 1; y += 2) {
+                for (let x = 1; x < GRID_WIDTH - 1; x += 2) {
+                    maze[y][x] = 0; // Create path
+                    
+                    // Connect to neighboring paths - increased probability for more open pathways
+                    if (x > 1) {
+                        // Connect horizontally
+                        if (Math.random() < 0.8) { // Increased from 0.65
+                            maze[y][x - 1] = 0;
+                        }
+                    }
+                    
+                    if (y > 1) {
+                        // Connect vertically
+                        if (Math.random() < 0.8) { // Increased from 0.65
+                            maze[y - 1][x] = 0;
+                        }
+                    }
+                }
+            }
+            
+            // Ensure there are enough paths - significantly increased for more open maze
+            for (let i = 0; i < 80; i++) { // Increased from 50
+                const x = Math.floor(Math.random() * (GRID_WIDTH - 2)) + 1;
+                const y = Math.floor(Math.random() * (GRID_HEIGHT - 2)) + 1;
+                maze[y][x] = 0;
+            }
+            
+            // Create guaranteed pathways to ensure maze is always passable
+            // Horizontal pathway
+            for (let x = 1; x < GRID_WIDTH-1; x++) {
+                maze[Math.floor(GRID_HEIGHT/2)][x] = 0;
+            }
+            
+            // Vertical pathway
+            for (let y = 1; y < GRID_HEIGHT-1; y++) {
+                maze[y][Math.floor(GRID_WIDTH/2)] = 0;
+            }
+            
+            // Ensure detective starting position is clear
+            maze[1][1] = 0;
+            maze[1][2] = 0;
+            maze[2][1] = 0;
+            
+            // Ensure bandit starting positions are clear
+            maze[GRID_HEIGHT - 2][GRID_WIDTH - 2] = 0;
+            maze[GRID_HEIGHT - 2][GRID_WIDTH - 3] = 0;
+            maze[GRID_HEIGHT - 3][GRID_WIDTH - 2] = 0;
+            
+            maze[1][GRID_WIDTH - 2] = 0;
+            maze[1][GRID_WIDTH - 3] = 0;
+            maze[2][GRID_WIDTH - 2] = 0;
+            
+            maze[GRID_HEIGHT - 2][1] = 0;
+            maze[GRID_HEIGHT - 2][2] = 0;
+            maze[GRID_HEIGHT - 3][1] = 0;
+        }
+        
+        // Place coins with movement properties
+        function placeCoins() {
+            coins = [];
+            for (let i = 0; i < 20; i++) {
+                placeCoin();
+            }
+        }
+        
+        function placeCoin() {
+            for (let attempts = 0; attempts < 50; attempts++) {
+                const x = Math.floor(Math.random() * (GRID_WIDTH - 2)) + 1;
+                const y = Math.floor(Math.random() * (GRID_HEIGHT - 2)) + 1;
+                
+                // Only place on paths
+                if (maze[y][x] === 0) {
+                    // Check if there's already a coin here
+                    const coinExists = coins.some(coin => coin.x === x && coin.y === y);
+                    const bridgeExists = bridges.some(bridge => bridge.x === x && bridge.y === y);
+                    const flagExists = redFlags.some(flag => flag.x === x && flag.y === y);
+                    
+                    // Don't place on detective or bandits
+                    const onDetective = (x === detective.x && y === detective.y);
+                    const onBandit = bandits.some(bandit => bandit.x === x && bandit.y === y);
+                    
+                    if (!coinExists && !bridgeExists && !flagExists && !onDetective && !onBandit) {
+                        // Add movement properties to coins
+                        coins.push({ 
+                            x,
+                            y, 
+                            collected: false,
+                            moveDelay: 0,
+                            direction: ['up', 'right', 'down', 'left'][Math.floor(Math.random() * 4)]
+                        });
+                        return;
+                    }
+                }
+            }
+        }
+        
+        // Place bridges
+        function placeBridges() {
+            bridges = [];
+            
+            for (let i = 0; i < 8; i++) {
+                for (let attempts = 0; attempts < 50; attempts++) {
+                    const x = Math.floor(Math.random() * (GRID_WIDTH - 2)) + 1;
+                    const y = Math.floor(Math.random() * (GRID_HEIGHT - 2)) + 1;
+                    
+                    // Only place on paths
+                    if (maze[y][x] === 0) {
+                        // Check if there's already something here
+                        const coinExists = coins.some(coin => coin.x === x && coin.y === y);
+                        const bridgeExists = bridges.some(bridge => bridge.x === x && bridge.y === y);
+                        
+                        // Don't place on detective or bandits
+                        const onDetective = (x === detective.x && y === detective.y);
+                        const onBandit = bandits.some(bandit => bandit.x === x && bandit.y === y);
+                        
+                        if (!coinExists && !bridgeExists && !onDetective && !onBandit) {
+                            bridges.push({ x, y });
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Place red flags
+        function placeRedFlags() {
+            redFlags = [];
+            
+            for (let i = 0; i < 6; i++) {
+                for (let attempts = 0; attempts < 50; attempts++) {
+                    const x = Math.floor(Math.random() * (GRID_WIDTH - 2)) + 1;
+                    const y = Math.floor(Math.random() * (GRID_HEIGHT - 2)) + 1;
+                    
+                    // Only place on paths
+                    if (maze[y][x] === 0) {
+                        // Check if there's already something here
+                        const coinExists = coins.some(coin => coin.x === x && coin.y === y);
+                        const bridgeExists = bridges.some(bridge => bridge.x === x && bridge.y === y);
+                        const flagExists = redFlags.some(flag => flag.x === x && flag.y === y);
+                        
+                        // Don't place on detective or bandits
+                        const onDetective = (x === detective.x && y === detective.y);
+                        const onBandit = bandits.some(bandit => bandit.x === x && bandit.y === y);
+                        
+                        if (!coinExists && !bridgeExists && !flagExists && !onDetective && !onBandit) {
+                            redFlags.push({ x, y, collected: false });
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Update function for the game loop
+        function gameLoop() {
+            // Clear canvas
+            ctx.fillStyle = COLORS.path;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Update game objects
+            updateDetective();
+            updateBandits();
+            updateCoins(); // Added coin movement
+            checkCollisions();
+            
+            // Draw game objects
+            drawMaze();
+            drawBridges();
+            drawCoins();
+            drawRedFlags();
+            drawDetective();
+            drawBandits();
+            
+            // Update HUD
+            scoreDisplay.textContent = `SCORE: ${score}`;
+            flagsDisplay.textContent = `RED FLAGS: ${flagsCollected}`;
+            
+            // Continue game loop if not game over
+            if (!gameOver) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        // New function to update coins
+        function updateCoins() {
+            coins.forEach(coin => {
+                if (coin.moveDelay > 0) {
+                    coin.moveDelay--;
+                    return;
+                }
+                
+                // 30% chance to move each time
+                if (Math.random() < 0.3) {
+                    let newX = coin.x;
+                    let newY = coin.y;
+                    
+                    // 20% chance to change direction
+                    if (Math.random() < 0.2) {
+                        coin.direction = ['up', 'right', 'down', 'left'][Math.floor(Math.random() * 4)];
+                    }
+                    
+                    // Move based on direction
+                    if (coin.direction === 'up') newY--;
+                    else if (coin.direction === 'right') newX++;
+                    else if (coin.direction === 'down') newY++;
+                    else if (coin.direction === 'left') newX--;
+                    
+                    // Check if valid move
+                    if (isValidMove(newX, newY)) {
+                        // Check if new position has a bridge
+                        const bridgeIndex = bridges.findIndex(bridge => bridge.x === newX && bridge.y === newY);
+                        
+                        if (bridgeIndex !== -1) {
+                            // Teleport to another random bridge
+                            const otherBridges = bridges.filter((_, i) => i !== bridgeIndex);
+                            
+                            if (otherBridges.length > 0) {
+                                const randomBridge = otherBridges[Math.floor(Math.random() * otherBridges.length)];
+                                coin.x = randomBridge.x;
+                                coin.y = randomBridge.y;
+                            }
+                        } else {
+                            // Just move normally
+                            coin.x = newX;
+                            coin.y = newY;
+                        }
+                    } else {
+                        // Change to random direction if blocked
+                        coin.direction = ['up', 'right', 'down', 'left'][Math.floor(Math.random() * 4)];
+                    }
+                }
+                
+                coin.moveDelay = 2; // Small delay between potential moves
+            });
+        }
+        
+        // Update detective
+        function updateDetective() {
+            if (detective.moveDelay > 0) {
+                detective.moveDelay--;
+                return;
+            }
+            
+            let newX = detective.x;
+            let newY = detective.y;
+            
+            // Handle movement
+            if (keys.ArrowUp) {
+                newY--;
+                detective.dir = 'up';
+            } else if (keys.ArrowRight) {
+                newX++;
+                detective.dir = 'right';
+            } else if (keys.ArrowDown) {
+                newY++;
+                detective.dir = 'down';
+            } else if (keys.ArrowLeft) {
+                newX--;
+                detective.dir = 'left';
+            }
+            
+            // Check if new position is valid
+            if (isValidMove(newX, newY)) {
+                detective.x = newX;
+                detective.y = newY;
+                detective.moveDelay = 5; // Increased delay between moves to slow pace
+            }
+        }
+        
+        // Update bandits
+        function updateBandits() {
+            bandits.forEach(bandit => {
+                if (bandit.moveDelay > 0) {
+                    bandit.moveDelay--;
+                    return;
+                }
+                
+                // Determine move delay based on if bandit is slowed - significantly increased to slow pace
+                const moveDelay = bandit.slowed ? 25 : 18; // Further slowed down to be slower than player
+                
+                // 80% chance to chase detective, 20% random movement
+                if (Math.random() < 0.8) {
+                    // Chase detective
+                    const dx = detective.x - bandit.x;
+                    const dy = detective.y - bandit.y;
+                    
+                    let possibleMoves = [];
+                    
+                    // Prioritize x or y based on which is farther
+                    if (Math.abs(dx) > Math.abs(dy)) {
+                        if (dx > 0) possibleMoves.push({ x: bandit.x + 1, y: bandit.y, dir: 'right' });
+                        if (dx < 0) possibleMoves.push({ x: bandit.x - 1, y: bandit.y, dir: 'left' });
+                        if (dy > 0) possibleMoves.push({ x: bandit.x, y: bandit.y + 1, dir: 'down' });
+                        if (dy < 0) possibleMoves.push({ x: bandit.x, y: bandit.y - 1, dir: 'up' });
+                    } else {
+                        if (dy > 0) possibleMoves.push({ x: bandit.x, y: bandit.y + 1, dir: 'down' });
+                        if (dy < 0) possibleMoves.push({ x: bandit.x, y: bandit.y - 1, dir: 'up' });
+                        if (dx > 0) possibleMoves.push({ x: bandit.x + 1, y: bandit.y, dir: 'right' });
+                        if (dx < 0) possibleMoves.push({ x: bandit.x - 1, y: bandit.y, dir: 'left' });
+                    }
+                    
+                    // Filter valid moves
+                    possibleMoves = possibleMoves.filter(move => isValidMove(move.x, move.y));
+                    
+                    // Make move if possible
+                    if (possibleMoves.length > 0) {
+                        const move = possibleMoves[0];
+                        bandit.x = move.x;
+                        bandit.y = move.y;
+                        bandit.dir = move.dir;
+                    } else {
+                        // Random move as fallback
+                        makeRandomMove(bandit);
+                    }
+                } else {
+                    // Random movement
+                    makeRandomMove(bandit);
+                }
+                
+                bandit.moveDelay = moveDelay;
+            });
+        }
+        
+        function makeRandomMove(bandit) {
+            // Get all possible moves
+            const possibleMoves = [];
+            
+            if (isValidMove(bandit.x + 1, bandit.y)) {
+                possibleMoves.push({ x: bandit.x + 1, y: bandit.y, dir: 'right' });
+            }
+            
+            if (isValidMove(bandit.x - 1, bandit.y)) {
+                possibleMoves.push({ x: bandit.x - 1, y: bandit.y, dir: 'left' });
+            }
+            
+            if (isValidMove(bandit.x, bandit.y + 1)) {
+                possibleMoves.push({ x: bandit.x, y: bandit.y + 1, dir: 'down' });
+            }
+            
+            if (isValidMove(bandit.x, bandit.y - 1)) {
+                possibleMoves.push({ x: bandit.x, y: bandit.y - 1, dir: 'up' });
+            }
+            
+            // Make a random move if possible
+            if (possibleMoves.length > 0) {
+                const randomIndex = Math.floor(Math.random() * possibleMoves.length);
+                const move = possibleMoves[randomIndex];
+                
+                bandit.x = move.x;
+                bandit.y = move.y;
+                bandit.dir = move.dir;
+            }
+        }
+        
+        // Check if move is valid
+        function isValidMove(x, y) {
+            // Check if within bounds
+            if (x < 0 || x >= GRID_WIDTH || y < 0 || y >= GRID_HEIGHT) {
+                return false;
+            }
+            
+            // Check if path
+            return maze[y][x] === 0;
+        }
+        
+        // Check collisions
+        function checkCollisions() {
+            // Check coin collisions
+            for (let i = 0; i < coins.length; i++) {
+                const coin = coins[i];
+                
+                if (!coin.collected && coin.x === detective.x && coin.y === detective.y) {
+                    coin.collected = true;
+                    score += 10;
+                }
+                
+                // Check if bandit collects coin
+                bandits.forEach(bandit => {
+                    if (!coin.collected && coin.x === bandit.x && coin.y === bandit.y) {
+                        coin.collected = true;
+                        score -= 5;
+                        if (score < 0) score = 0;
+                    }
+                });
+            }
+            
+            // Remove collected coins
+            coins = coins.filter(coin => !coin.collected);
+            
+            // Check red flag collisions
+            for (let i = 0; i < redFlags.length; i++) {
+                const flag = redFlags[i];
+                
+                if (!flag.collected && flag.x === detective.x && flag.y === detective.y) {
+                    flag.collected = true;
+                    flagsCollected++;
+                    
+                    // Slow down all bandits
+                    bandits.forEach(bandit => {
+                        bandit.slowed = true;
+                    });
+                }
+            }
+            
+            // Remove collected flags
+            redFlags = redFlags.filter(flag => !flag.collected);
+            
+            // Check bandit collisions
+            bandits.forEach(bandit => {
+                if (bandit.x === detective.x && bandit.y === detective.y) {
+                    score -= 15;
+                    if (score < 0) score = 0;
+                    
+                    // Move detective back to start
+                    detective.x = 1;
+                    detective.y = 1;
+                }
+            });
+            
+            // Check bridge teleportation
+            bridges.forEach((bridge, i) => {
+                if (bridge.x === detective.x && bridge.y === detective.y) {
+                    // Teleport to another random bridge
+                    const otherBridges = bridges.filter((_, j) => j !== i);
+                    
+                    if (otherBridges.length > 0) {
+                        const randomBridge = otherBridges[Math.floor(Math.random() * otherBridges.length)];
+                        detective.x = randomBridge.x;
+                        detective.y = randomBridge.y;
+                    }
+                }
+            });
+            
+            // End game if all coins and flags are collected
+            if (coins.length === 0 && redFlags.length === 0) {
+                placeBridges();
+                placeCoins();
+                placeRedFlags();
+                score += 50; // Bonus for clearing the level
+            }
+        }
+        
+        // Draw maze
+        function drawMaze() {
+            for (let y = 0; y < GRID_HEIGHT; y++) {
+                for (let x = 0; x < GRID_WIDTH; x++) {
+                    if (maze[y][x] === 1) {
+                        ctx.fillStyle = COLORS.wall;
+                        ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                    }
+                }
+            }
+        }
+        
+        // Draw bridges
+        function drawBridges() {
+            ctx.fillStyle = COLORS.bridge;
+            
+            bridges.forEach(bridge => {
+                const x = bridge.x * CELL_SIZE;
+                const y = bridge.y * CELL_SIZE;
+                
+                ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+                
+                // Draw bridge planks
+                ctx.fillStyle = '#654321';
+                for (let i = 0; i < CELL_SIZE; i += 8) {
+                    ctx.fillRect(x + i, y, 4, CELL_SIZE);
+                }
+                ctx.fillStyle = COLORS.bridge;
+            });
+        }
+        
+        // Draw coins
+        function drawCoins() {
+            ctx.fillStyle = COLORS.coin;
+            
+            coins.forEach(coin => {
+                const x = coin.x * CELL_SIZE + CELL_SIZE / 2;
+                const y = coin.y * CELL_SIZE + CELL_SIZE / 2;
+                const radius = CELL_SIZE / 3;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw Bitcoin symbol
+                ctx.fillStyle = '#000';
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('₿', x, y);
+                ctx.fillStyle = COLORS.coin;
+            });
+        }
+        
+        // Draw red flags
+        function drawRedFlags() {
+            ctx.fillStyle = COLORS.redFlag;
+            
+            redFlags.forEach(flag => {
+                const x = flag.x * CELL_SIZE;
+                const y = flag.y * CELL_SIZE;
+                
+                // Draw flag pole
+                ctx.fillRect(x + CELL_SIZE / 2 - 1, y + 5, 2, CELL_SIZE - 10);
+                
+                // Draw flag
+                ctx.beginPath();
+                ctx.moveTo(x + CELL_SIZE / 2 + 1, y + 5);
+                ctx.lineTo(x + CELL_SIZE / 2 + 15, y + 12);
+                ctx.lineTo(x + CELL_SIZE / 2 + 1, y + 20);
+                ctx.closePath();
+                ctx.fill();
+            });
+        }
+        
+        // Draw detective
+        function drawDetective() {
+            const x = detective.x * CELL_SIZE;
+            const y = detective.y * CELL_SIZE;
+            
+            ctx.fillStyle = COLORS.detective;
+            ctx.beginPath();
+            ctx.arc(x + CELL_SIZE / 2, y + CELL_SIZE / 2, CELL_SIZE / 2 - 5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw detective face
+            ctx.fillStyle = '#000';
+            
+            // Eyes
+            if (detective.dir === 'right') {
+                ctx.fillRect(x + CELL_SIZE * 0.6, y + CELL_SIZE * 0.3, 4, 4); // right eye
+                ctx.fillRect(x + CELL_SIZE * 0.3, y + CELL_SIZE * 0.3, 4, 4); // left eye
+            } else if (detective.dir === 'left') {
+                ctx.fillRect(x + CELL_SIZE * 0.6, y + CELL_SIZE * 0.3, 4, 4); // right eye
+                ctx.fillRect(x + CELL_SIZE * 0.3, y + CELL_SIZE * 0.3, 4, 4); // left eye
+            } else if (detective.dir === 'up') {
+                ctx.fillRect(x + CELL_SIZE * 0.6, y + CELL_SIZE * 0.3, 4, 4); // right eye
+                ctx.fillRect(x + CELL_SIZE * 0.3, y + CELL_SIZE * 0.3, 4, 4); // left eye
+            } else if (detective.dir === 'down') {
+                ctx.fillRect(x + CELL_SIZE * 0.6, y + CELL_SIZE * 0.3, 4, 4); // right eye
+                ctx.fillRect(x + CELL_SIZE * 0.3, y + CELL_SIZE * 0.3, 4, 4); // left eye
+            }
+            
+            // Draw detective hat
+            ctx.fillStyle = '#000';
+            ctx.fillRect(x + CELL_SIZE * 0.15, y + CELL_SIZE * 0.15, CELL_SIZE * 0.7, 5);
+            ctx.fillRect(x + CELL_SIZE * 0.25, y + CELL_SIZE * 0.05, CELL_SIZE * 0.5, 10);
+        }
+        
+        // Draw bandits
+        function drawBandits() {
+            bandits.forEach(bandit => {
+                const x = bandit.x * CELL_SIZE;
+                const y = bandit.y * CELL_SIZE;
+                
+                ctx.fillStyle = bandit.slowed ? '#FF9999' : COLORS.bandit;
+                ctx.beginPath();
+                ctx.arc(x + CELL_SIZE / 2, y + CELL_SIZE / 2, CELL_SIZE / 2 - 5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw bandit face
+                ctx.fillStyle = '#000';
+                
+                // Eyes
+                if (bandit.dir === 'right') {
+                    ctx.fillRect(x + CELL_SIZE * 0.6, y + CELL_SIZE * 0.3, 4, 4);
+                    ctx.fillRect(x + CELL_SIZE * 0.3, y + CELL_SIZE * 0.3, 4, 4);
+                } else if (bandit.dir === 'left') {
+                    ctx.fillRect(x + CELL_SIZE * 0.6, y + CELL_SIZE * 0.3, 4, 4);
+                    ctx.fillRect(x + CELL_SIZE * 0.3, y + CELL_SIZE * 0.3, 4, 4);
+                } else if (bandit.dir === 'up') {
+                    ctx.fillRect(x + CELL_SIZE * 0.6, y + CELL_SIZE * 0.3, 4, 4);
+                    ctx.fillRect(x + CELL_SIZE * 0.3, y + CELL_SIZE * 0.3, 4, 4);
+                } else if (bandit.dir === 'down') {
+                    ctx.fillRect(x + CELL_SIZE * 0.6, y + CELL_SIZE * 0.3, 4, 4);
+                    ctx.fillRect(x + CELL_SIZE * 0.3, y + CELL_SIZE * 0.3, 4, 4);
+                }
+                
+                // Draw bandit mask
+                ctx.fillRect(x + CELL_SIZE * 0.2, y + CELL_SIZE * 0.5, CELL_SIZE * 0.6, 5);
+            });
+        }
+        
+        // End game
+        function endGame() {
+            gameOver = true;
+            clearInterval(timer);
+            
+            // Update final score display
+            finalScoreDisplay.textContent = `YOUR SCORE: ${score}`;
+            
+            // Update final message based on score
+            if (score >= 200) {
+                finalMessageDisplay.textContent = 'EXCELLENT INVESTIGATION!';
+            } else if (score >= 100) {
+                finalMessageDisplay.textContent = 'GOOD JOB, DETECTIVE!';
+            } else {
+                finalMessageDisplay.textContent = 'TRY AGAIN!';
+            }
+            
+            // Show game over screen
+            gameOverScreen.style.display = 'flex';
+        }
+        
+        // Event listeners
+        document.addEventListener('keydown', (e) => {
+            if (e.key in keys) {
+                keys[e.key] = true;
+                e.preventDefault();
+            }
+            
+            if (!gameStarted && e.key === 'Enter') {
+                initGame();
+            } else if (gameOver && e.key === 'Enter') {
+                initGame();
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (e.key in keys) {
+                keys[e.key] = false;
+                e.preventDefault();
+            }
+        });
+        
+        startBtn.addEventListener('click', initGame);
+        restartBtn.addEventListener('click', initGame);
+    </script>
+</body>
+</html>
