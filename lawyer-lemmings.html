@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LAWYER LEMMINGS: The Bar Exam</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1a0a2e;
+            font-family: 'Courier New', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            background: #000;
+            border: 4px solid #ffd700;
+            box-shadow: 0 0 20px #ffd700, inset 0 0 20px rgba(255, 215, 0, 0.1);
+        }
+
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+        }
+
+        #ui-panel {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 80px;
+            background: linear-gradient(to bottom, #2a1a4a, #1a0a2e);
+            border-top: 3px solid #ffd700;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 20px;
+        }
+
+        .tool-btn {
+            width: 60px;
+            height: 60px;
+            background: #3a2a5a;
+            border: 2px solid #ffd700;
+            color: #ffd700;
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .tool-btn:hover {
+            background: #5a4a7a;
+            transform: scale(1.05);
+        }
+
+        .tool-btn.selected {
+            background: #ffd700;
+            color: #1a0a2e;
+            box-shadow: 0 0 10px #ffd700;
+        }
+
+        .tool-btn .icon {
+            font-size: 24px;
+            margin-bottom: 2px;
+        }
+
+        .tool-btn .count {
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        #stats {
+            display: flex;
+            gap: 20px;
+            color: #ffd700;
+            font-size: 14px;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        #title-screen, #win-screen, #lose-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(26, 10, 46, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #ffd700;
+            text-align: center;
+            z-index: 100;
+        }
+
+        #win-screen, #lose-screen {
+            display: none;
+        }
+
+        h1 {
+            font-size: 48px;
+            text-shadow: 0 0 20px #ffd700;
+            margin-bottom: 10px;
+            letter-spacing: 4px;
+        }
+
+        h2 {
+            font-size: 24px;
+            color: #aaa;
+            margin-bottom: 30px;
+        }
+
+        .subtitle {
+            font-size: 18px;
+            color: #888;
+            margin-bottom: 40px;
+            font-style: italic;
+        }
+
+        .instructions {
+            max-width: 600px;
+            line-height: 1.8;
+            margin-bottom: 30px;
+            color: #ccc;
+            font-size: 14px;
+        }
+
+        .instructions strong {
+            color: #ffd700;
+        }
+
+        .start-btn {
+            background: #ffd700;
+            color: #1a0a2e;
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .start-btn:hover {
+            background: #fff;
+            transform: scale(1.1);
+            box-shadow: 0 0 30px #ffd700;
+        }
+
+        .blink {
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        .win-message {
+            font-size: 32px;
+            color: #00ff00;
+            text-shadow: 0 0 20px #00ff00;
+        }
+
+        .lose-message {
+            font-size: 32px;
+            color: #ff4444;
+            text-shadow: 0 0 20px #ff4444;
+        }
+
+        .final-stats {
+            font-size: 18px;
+            margin: 20px 0;
+            color: #ccc;
+        }
+
+        .quote {
+            font-style: italic;
+            color: #888;
+            margin-top: 20px;
+            max-width: 500px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="900" height="500"></canvas>
+
+        <div id="ui-panel">
+            <div id="tools">
+                <button class="tool-btn" id="btn-build" title="Build Bridge (B)">
+                    <span class="icon">📚</span>
+                    <span>BUILD</span>
+                    <span class="count" id="build-count">15</span>
+                </button>
+                <button class="tool-btn" id="btn-backstab" title="Backstab (S)">
+                    <span class="icon">🗡️</span>
+                    <span>STAB</span>
+                    <span class="count" id="stab-count">5</span>
+                </button>
+                <button class="tool-btn" id="btn-speed" title="Toggle Speed (Space)">
+                    <span class="icon">⏩</span>
+                    <span>SPEED</span>
+                    <span class="count">x1</span>
+                </button>
+            </div>
+
+            <div id="stats">
+                <div class="stat">
+                    <div>RELEASED</div>
+                    <div class="stat-value" id="released-count">0</div>
+                </div>
+                <div class="stat">
+                    <div>SAVED</div>
+                    <div class="stat-value" id="saved-count">0/10</div>
+                </div>
+                <div class="stat">
+                    <div>GOAL</div>
+                    <div class="stat-value" id="goal-count">8</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="title-screen">
+            <h1>LAWYER LEMMINGS</h1>
+            <h2>The Bar Exam</h2>
+            <p class="subtitle">"Objection! I was here first!" - Every Lawyer Ever</p>
+            <div class="instructions">
+                <strong>OBJECTIVE:</strong> Guide your lawyers to the CASH PILE!<br><br>
+                <strong>TOOLS:</strong><br>
+                📚 <strong>BUILD (B key)</strong> - Click a lawyer to make them build a bridge with law books<br>
+                🗡️ <strong>BACKSTAB (S key)</strong> - Click a lawyer to make them "eliminate" the lawyer ahead<br>
+                ⏩ <strong>SPEED (Space)</strong> - Toggle game speed<br><br>
+                <strong>TIPS:</strong><br>
+                - Lawyers walk automatically and turn at walls<br>
+                - Builders stop and stack books to create bridges<br>
+                - Backstabbers remove the lawyer directly in front of them<br>
+                - Save at least <strong>8 lawyers</strong> to pass the Bar!
+            </div>
+            <button class="start-btn" id="start-btn">CALL TO ORDER!</button>
+            <p class="blink" style="margin-top: 20px;">Press ENTER or Click to Start</p>
+        </div>
+
+        <div id="win-screen">
+            <h1>CASE CLOSED!</h1>
+            <p class="win-message">You passed the Bar Exam!</p>
+            <p class="final-stats">
+                Lawyers Saved: <span id="win-saved">0</span>/10<br>
+                Books Used: <span id="win-books">0</span><br>
+                Backstabs: <span id="win-stabs">0</span>
+            </p>
+            <p class="quote">"The first thing we do, let's kill all the lawyers... wait, they did that themselves."</p>
+            <button class="start-btn" id="replay-btn">APPEAL!</button>
+        </div>
+
+        <div id="lose-screen">
+            <h1>DISBARRED!</h1>
+            <p class="lose-message">Not enough lawyers reached the cash!</p>
+            <p class="final-stats">
+                Lawyers Saved: <span id="lose-saved">0</span>/10<br>
+                Needed: 8 lawyers
+            </p>
+            <p class="quote">"A lawyer with no clients is like a ship with no anchor... sinking fast."</p>
+            <button class="start-btn" id="retry-btn">RETRIAL!</button>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // LAWYER LEMMINGS: The Bar Exam
+        // A parody game where lawyers race to cash
+        // ============================================
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game constants
+        const TILE_SIZE = 20;
+        const GRAVITY = 0.5;
+        const WALK_SPEED = 1;
+        const FALL_SPEED = 3;
+        const LAWYER_COUNT = 10;
+        const GOAL_LAWYERS = 8;
+        const BUILD_USES = 15;
+        const STAB_USES = 5;
+
+        // Game state
+        let gameState = 'title'; // title, playing, won, lost
+        let lawyers = [];
+        let buildings = []; // Book bridges
+        let particles = [];
+        let selectedTool = null;
+        let buildCount = BUILD_USES;
+        let stabCount = STAB_USES;
+        let savedCount = 0;
+        let releasedCount = 0;
+        let booksUsed = 0;
+        let stabsUsed = 0;
+        let spawnTimer = 0;
+        let gameSpeed = 1;
+        let levelData = null;
+
+        // Sound effects (simple beeps using Web Audio)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(freq, duration, type = 'square') {
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.frequency.value = freq;
+            oscillator.type = type;
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + duration);
+        }
+
+        // Level definition
+        function createLevel() {
+            // Level is 45x25 tiles (900x500 pixels for game area, minus UI)
+            const level = {
+                width: 45,
+                height: 21, // Leave room for UI
+                spawn: { x: 2, y: 3 },
+                exit: { x: 42, y: 17 },
+                tiles: []
+            };
+
+            // Initialize with air
+            for (let y = 0; y < level.height; y++) {
+                level.tiles[y] = [];
+                for (let x = 0; x < level.width; x++) {
+                    level.tiles[y][x] = 0; // Air
+                }
+            }
+
+            // Create ground and platforms
+            // Bottom ground
+            for (let x = 0; x < level.width; x++) {
+                level.tiles[level.height - 1][x] = 1;
+            }
+
+            // Spawn platform (left side, high up)
+            for (let x = 0; x < 8; x++) {
+                level.tiles[5][x] = 1;
+            }
+
+            // First gap - needs bridge
+            // Platform after gap
+            for (let x = 12; x < 20; x++) {
+                level.tiles[5][x] = 1;
+            }
+
+            // Slope down using platforms
+            for (let x = 20; x < 24; x++) {
+                level.tiles[8][x] = 1;
+            }
+
+            // Middle section with obstacles
+            for (let x = 24; x < 32; x++) {
+                level.tiles[11][x] = 1;
+            }
+
+            // Second gap - needs bridge
+            // Platform after second gap
+            for (let x = 36; x < 45; x++) {
+                level.tiles[11][x] = 1;
+            }
+
+            // Stairs down to exit
+            level.tiles[13][38] = 1;
+            level.tiles[13][39] = 1;
+            level.tiles[13][40] = 1;
+
+            level.tiles[15][40] = 1;
+            level.tiles[15][41] = 1;
+            level.tiles[15][42] = 1;
+
+            // Exit platform
+            for (let x = 40; x < 45; x++) {
+                level.tiles[18][x] = 1;
+            }
+
+            // Some walls
+            for (let y = 5; y < 12; y++) {
+                level.tiles[y][0] = 1; // Left wall
+            }
+
+            // Decorative pillars
+            for (let y = 12; y < level.height - 1; y++) {
+                level.tiles[y][10] = 1;
+                level.tiles[y][25] = 1;
+            }
+
+            return level;
+        }
+
+        // Lawyer class
+        class Lawyer {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = WALK_SPEED;
+                this.vy = 0;
+                this.width = 16;
+                this.height = 20;
+                this.state = 'walking'; // walking, falling, building, dead, saved
+                this.direction = 1; // 1 = right, -1 = left
+                this.animFrame = 0;
+                this.animTimer = 0;
+                this.buildProgress = 0;
+                this.buildX = 0;
+                this.buildY = 0;
+                this.wiggleOffset = Math.random() * Math.PI * 2;
+            }
+
+            update() {
+                if (this.state === 'dead' || this.state === 'saved') return;
+
+                this.animTimer++;
+                if (this.animTimer > 8) {
+                    this.animTimer = 0;
+                    this.animFrame = (this.animFrame + 1) % 4;
+                }
+
+                if (this.state === 'building') {
+                    this.buildProgress++;
+                    if (this.buildProgress >= 30) {
+                        // Place a book block
+                        const bookX = Math.floor((this.x + this.width/2) / TILE_SIZE) + this.direction;
+                        const bookY = Math.floor((this.y + this.height) / TILE_SIZE);
+
+                        if (bookX >= 0 && bookX < levelData.width && bookY >= 0 && bookY < levelData.height) {
+                            if (levelData.tiles[bookY][bookX] === 0) {
+                                buildings.push({
+                                    x: bookX,
+                                    y: bookY,
+                                    type: 'book'
+                                });
+                                levelData.tiles[bookY][bookX] = 2; // Book tile
+                                playSound(880, 0.1);
+                                booksUsed++;
+
+                                // Create particles
+                                for (let i = 0; i < 5; i++) {
+                                    particles.push({
+                                        x: bookX * TILE_SIZE + TILE_SIZE/2,
+                                        y: bookY * TILE_SIZE,
+                                        vx: (Math.random() - 0.5) * 4,
+                                        vy: -Math.random() * 3,
+                                        life: 30,
+                                        color: '#ffd700'
+                                    });
+                                }
+                            }
+                        }
+
+                        buildCount--;
+                        document.getElementById('build-count').textContent = buildCount;
+
+                        if (buildCount <= 0) {
+                            this.state = 'walking';
+                        } else {
+                            this.buildProgress = 0;
+                        }
+                    }
+                    return;
+                }
+
+                // Apply gravity
+                this.vy += GRAVITY;
+                if (this.vy > FALL_SPEED) this.vy = FALL_SPEED;
+
+                // Check if on ground
+                const feetY = this.y + this.height;
+                const leftX = this.x + 2;
+                const rightX = this.x + this.width - 2;
+
+                const onGround = this.checkCollision(leftX, feetY + 1) ||
+                                 this.checkCollision(rightX, feetY + 1);
+
+                if (onGround && this.vy >= 0) {
+                    this.vy = 0;
+                    this.y = Math.floor(feetY / TILE_SIZE) * TILE_SIZE - this.height;
+                    this.state = 'walking';
+                } else if (!onGround) {
+                    this.state = 'falling';
+                }
+
+                // Walk
+                if (this.state === 'walking') {
+                    const nextX = this.x + this.vx * this.direction;
+                    const headY = this.y + 4;
+                    const bodyY = this.y + this.height - 4;
+
+                    // Check wall collision
+                    const checkX = this.direction > 0 ? nextX + this.width : nextX;
+                    if (this.checkCollision(checkX, headY) || this.checkCollision(checkX, bodyY)) {
+                        // Turn around
+                        this.direction *= -1;
+                        playSound(220, 0.05);
+                    } else {
+                        this.x = nextX;
+                    }
+                }
+
+                // Apply vertical movement
+                this.y += this.vy;
+
+                // Check exit
+                const centerX = this.x + this.width / 2;
+                const centerY = this.y + this.height / 2;
+                const distToExit = Math.hypot(
+                    centerX - (levelData.exit.x * TILE_SIZE + TILE_SIZE),
+                    centerY - (levelData.exit.y * TILE_SIZE)
+                );
+
+                if (distToExit < TILE_SIZE * 2) {
+                    this.state = 'saved';
+                    savedCount++;
+                    document.getElementById('saved-count').textContent = `${savedCount}/10`;
+                    playSound(523, 0.1);
+                    playSound(659, 0.1);
+                    playSound(784, 0.2);
+
+                    // Check win condition
+                    if (savedCount >= GOAL_LAWYERS) {
+                        setTimeout(() => {
+                            if (gameState === 'playing') winGame();
+                        }, 500);
+                    }
+                }
+
+                // Check death (fall off bottom)
+                if (this.y > canvas.height) {
+                    this.state = 'dead';
+                    checkLoseCondition();
+                }
+
+                // Check bounds
+                if (this.x < 0) {
+                    this.x = 0;
+                    this.direction = 1;
+                }
+                if (this.x > canvas.width - this.width) {
+                    this.x = canvas.width - this.width;
+                    this.direction = -1;
+                }
+            }
+
+            checkCollision(x, y) {
+                const tileX = Math.floor(x / TILE_SIZE);
+                const tileY = Math.floor(y / TILE_SIZE);
+
+                if (tileX < 0 || tileX >= levelData.width || tileY < 0 || tileY >= levelData.height) {
+                    return false;
+                }
+
+                return levelData.tiles[tileY][tileX] > 0;
+            }
+
+            draw() {
+                if (this.state === 'dead' || this.state === 'saved') return;
+
+                const wiggle = Math.sin(Date.now() / 100 + this.wiggleOffset) * 2;
+
+                ctx.save();
+                ctx.translate(this.x + this.width/2, this.y + this.height);
+
+                if (this.direction < 0) {
+                    ctx.scale(-1, 1);
+                }
+
+                // Gown (black robe)
+                ctx.fillStyle = '#1a1a1a';
+                ctx.beginPath();
+                ctx.moveTo(-7, 0);
+                ctx.lineTo(-8, -12);
+                ctx.lineTo(8, -12);
+                ctx.lineTo(7, 0);
+                ctx.closePath();
+                ctx.fill();
+
+                // Gown details
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, -12);
+                ctx.lineTo(0, 0);
+                ctx.stroke();
+
+                // White collar bands
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(-3, -13, 2, 4);
+                ctx.fillRect(1, -13, 2, 4);
+
+                // Face
+                ctx.fillStyle = '#ffd5c8';
+                ctx.beginPath();
+                ctx.ellipse(0, -15, 5, 4, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Eyes
+                ctx.fillStyle = '#000';
+                const eyeOffset = this.state === 'building' ? 2 : 0;
+                ctx.fillRect(-3 + eyeOffset, -16, 2, 2);
+                ctx.fillRect(1 + eyeOffset, -16, 2, 2);
+
+                // Smug expression (building)
+                if (this.state === 'building') {
+                    ctx.strokeStyle = '#000';
+                    ctx.beginPath();
+                    ctx.arc(0, -13, 3, 0.2, Math.PI - 0.2);
+                    ctx.stroke();
+                }
+
+                // Wig (white curly)
+                ctx.fillStyle = '#f5f5f5';
+                // Main wig body
+                ctx.beginPath();
+                ctx.ellipse(0, -18, 7, 5, 0, Math.PI, 0);
+                ctx.fill();
+
+                // Wig curls on sides
+                for (let i = 0; i < 3; i++) {
+                    ctx.beginPath();
+                    ctx.arc(-6, -14 + i * 3, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(6, -14 + i * 3, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Wig top curls
+                ctx.beginPath();
+                ctx.arc(-3, -21, 2, 0, Math.PI * 2);
+                ctx.arc(0, -22, 2, 0, Math.PI * 2);
+                ctx.arc(3, -21, 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Walking animation - legs
+                if (this.state === 'walking') {
+                    const legOffset = Math.sin(this.animFrame * Math.PI / 2) * 3;
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(-4, 0, 3, 4 + legOffset);
+                    ctx.fillRect(1, 0, 3, 4 - legOffset);
+                }
+
+                // Briefcase (in hand)
+                ctx.fillStyle = '#8B4513';
+                const briefcaseY = this.state === 'walking' ?
+                    -6 + Math.abs(Math.sin(this.animFrame * Math.PI / 2)) * 2 : -6;
+                ctx.fillRect(6, briefcaseY, 6, 5);
+                ctx.fillStyle = '#ffd700';
+                ctx.fillRect(8, briefcaseY + 2, 2, 1);
+
+                // Building animation - show book
+                if (this.state === 'building') {
+                    ctx.fillStyle = '#8B0000';
+                    ctx.fillRect(8, -14 - (this.buildProgress % 10), 8, 6);
+                    ctx.fillStyle = '#ffd700';
+                    ctx.font = '6px serif';
+                    ctx.fillText('LAW', 9, -10 - (this.buildProgress % 10));
+                }
+
+                ctx.restore();
+            }
+
+            containsPoint(px, py) {
+                return px >= this.x && px <= this.x + this.width &&
+                       py >= this.y && py <= this.y + this.height + 5;
+            }
+        }
+
+        // Initialize game
+        function initGame() {
+            levelData = createLevel();
+            lawyers = [];
+            buildings = [];
+            particles = [];
+            buildCount = BUILD_USES;
+            stabCount = STAB_USES;
+            savedCount = 0;
+            releasedCount = 0;
+            booksUsed = 0;
+            stabsUsed = 0;
+            spawnTimer = 0;
+            selectedTool = null;
+            gameSpeed = 1;
+
+            document.getElementById('build-count').textContent = buildCount;
+            document.getElementById('stab-count').textContent = stabCount;
+            document.getElementById('saved-count').textContent = '0/10';
+            document.getElementById('released-count').textContent = '0';
+
+            // Clear tool selection
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('selected'));
+        }
+
+        // Spawn a lawyer
+        function spawnLawyer() {
+            if (releasedCount < LAWYER_COUNT) {
+                const lawyer = new Lawyer(
+                    levelData.spawn.x * TILE_SIZE,
+                    levelData.spawn.y * TILE_SIZE
+                );
+                lawyers.push(lawyer);
+                releasedCount++;
+                document.getElementById('released-count').textContent = releasedCount;
+                playSound(440, 0.1);
+            }
+        }
+
+        // Win game
+        function winGame() {
+            gameState = 'won';
+            document.getElementById('win-saved').textContent = savedCount;
+            document.getElementById('win-books').textContent = booksUsed;
+            document.getElementById('win-stabs').textContent = stabsUsed;
+            document.getElementById('win-screen').style.display = 'flex';
+
+            // Victory sound
+            playSound(523, 0.2);
+            setTimeout(() => playSound(659, 0.2), 200);
+            setTimeout(() => playSound(784, 0.2), 400);
+            setTimeout(() => playSound(1047, 0.4), 600);
+        }
+
+        // Lose condition check
+        function checkLoseCondition() {
+            const aliveLawyers = lawyers.filter(l => l.state !== 'dead' && l.state !== 'saved');
+            const remainingToSpawn = LAWYER_COUNT - releasedCount;
+            const possibleSaves = aliveLawyers.length + remainingToSpawn + savedCount;
+
+            if (possibleSaves < GOAL_LAWYERS && gameState === 'playing') {
+                loseGame();
+            }
+
+            // Also check if all lawyers are done
+            if (releasedCount >= LAWYER_COUNT && aliveLawyers.length === 0 && savedCount < GOAL_LAWYERS && gameState === 'playing') {
+                loseGame();
+            }
+        }
+
+        // Lose game
+        function loseGame() {
+            gameState = 'lost';
+            document.getElementById('lose-saved').textContent = savedCount;
+            document.getElementById('lose-screen').style.display = 'flex';
+
+            // Sad sound
+            playSound(400, 0.2);
+            setTimeout(() => playSound(350, 0.2), 200);
+            setTimeout(() => playSound(300, 0.4), 400);
+        }
+
+        // Draw level
+        function drawLevel() {
+            // Background - courtroom style
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#2a1a4a');
+            gradient.addColorStop(1, '#1a0a2e');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw tiles
+            for (let y = 0; y < levelData.height; y++) {
+                for (let x = 0; x < levelData.width; x++) {
+                    const tile = levelData.tiles[y][x];
+
+                    if (tile === 1) {
+                        // Ground tile - marble courthouse floor
+                        ctx.fillStyle = '#4a4a5a';
+                        ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+                        // Marble texture
+                        ctx.fillStyle = '#5a5a6a';
+                        ctx.fillRect(x * TILE_SIZE + 2, y * TILE_SIZE + 2, 6, 6);
+                        ctx.fillRect(x * TILE_SIZE + 12, y * TILE_SIZE + 10, 5, 5);
+
+                        // Top edge highlight
+                        ctx.fillStyle = '#6a6a7a';
+                        ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, 2);
+                    } else if (tile === 2) {
+                        // Book bridge
+                        drawBook(x * TILE_SIZE, y * TILE_SIZE);
+                    }
+                }
+            }
+
+            // Draw spawn point (courthouse door)
+            const spawnX = levelData.spawn.x * TILE_SIZE;
+            const spawnY = levelData.spawn.y * TILE_SIZE;
+
+            ctx.fillStyle = '#654321';
+            ctx.fillRect(spawnX - 5, spawnY - 30, 40, 50);
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(spawnX, spawnY - 25, 30, 40);
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 10px serif';
+            ctx.fillText('COURT', spawnX + 3, spawnY - 5);
+
+            // Door handle
+            ctx.beginPath();
+            ctx.arc(spawnX + 24, spawnY, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw exit (pile of cash)
+            const exitX = levelData.exit.x * TILE_SIZE;
+            const exitY = levelData.exit.y * TILE_SIZE;
+
+            // Cash pile
+            for (let i = 0; i < 5; i++) {
+                for (let j = 0; j < 3 - Math.floor(i/2); j++) {
+                    const stackX = exitX + j * 15 + (i % 2) * 7;
+                    const stackY = exitY - i * 8 - 10;
+
+                    // Money stack
+                    ctx.fillStyle = '#228B22';
+                    ctx.fillRect(stackX, stackY, 14, 10);
+                    ctx.fillStyle = '#32CD32';
+                    ctx.fillRect(stackX + 1, stackY + 1, 12, 8);
+
+                    // Dollar sign
+                    ctx.fillStyle = '#006400';
+                    ctx.font = 'bold 8px sans-serif';
+                    ctx.fillText('$', stackX + 4, stackY + 8);
+                }
+            }
+
+            // Glowing effect
+            ctx.fillStyle = 'rgba(255, 215, 0, ' + (0.3 + Math.sin(Date.now() / 200) * 0.2) + ')';
+            ctx.beginPath();
+            ctx.arc(exitX + 20, exitY - 20, 40, 0, Math.PI * 2);
+            ctx.fill();
+
+            // "THE MONEY" text
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.fillText('$ CASH $', exitX - 5, exitY - 50);
+        }
+
+        // Draw a book tile
+        function drawBook(x, y) {
+            // Book cover
+            ctx.fillStyle = '#8B0000';
+            ctx.fillRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+
+            // Book spine
+            ctx.fillStyle = '#5a0000';
+            ctx.fillRect(x + 1, y + 1, 3, TILE_SIZE - 2);
+
+            // Gold text
+            ctx.fillStyle = '#ffd700';
+            ctx.font = '8px serif';
+            ctx.fillText('LAW', x + 5, y + 13);
+
+            // Pages
+            ctx.fillStyle = '#f5f5dc';
+            ctx.fillRect(x + TILE_SIZE - 4, y + 3, 2, TILE_SIZE - 6);
+        }
+
+        // Draw particles
+        function drawParticles() {
+            particles = particles.filter(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.2;
+                p.life--;
+
+                if (p.life > 0) {
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = p.life / 30;
+                    ctx.fillRect(p.x, p.y, 4, 4);
+                    ctx.globalAlpha = 1;
+                    return true;
+                }
+                return false;
+            });
+        }
+
+        // Main game loop
+        function gameLoop() {
+            if (gameState !== 'playing') {
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            // Update spawn timer
+            spawnTimer++;
+            if (spawnTimer >= 90 / gameSpeed && releasedCount < LAWYER_COUNT) {
+                spawnLawyer();
+                spawnTimer = 0;
+            }
+
+            // Update lawyers
+            for (let i = 0; i < gameSpeed; i++) {
+                lawyers.forEach(lawyer => lawyer.update());
+            }
+
+            // Draw everything
+            drawLevel();
+            drawParticles();
+            lawyers.forEach(lawyer => lawyer.draw());
+
+            // Draw cursor indicator for selected tool
+            if (selectedTool) {
+                ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+                ctx.font = '20px sans-serif';
+                // Tool indicator follows mouse (drawn in mouse move handler)
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Handle click on lawyer
+        function handleLawyerClick(x, y) {
+            if (!selectedTool || gameState !== 'playing') return;
+
+            // Find clicked lawyer
+            const clickedLawyer = lawyers.find(l =>
+                l.state === 'walking' && l.containsPoint(x, y)
+            );
+
+            if (!clickedLawyer) return;
+
+            if (selectedTool === 'build' && buildCount > 0) {
+                clickedLawyer.state = 'building';
+                clickedLawyer.buildProgress = 0;
+                playSound(660, 0.1);
+
+                // Create sparkle effect
+                for (let i = 0; i < 10; i++) {
+                    particles.push({
+                        x: clickedLawyer.x + clickedLawyer.width/2,
+                        y: clickedLawyer.y,
+                        vx: (Math.random() - 0.5) * 6,
+                        vy: -Math.random() * 4,
+                        life: 20,
+                        color: '#ffd700'
+                    });
+                }
+            } else if (selectedTool === 'backstab' && stabCount > 0) {
+                // Find lawyer in front
+                const targetLawyer = lawyers.find(l => {
+                    if (l === clickedLawyer || l.state === 'dead' || l.state === 'saved') return false;
+
+                    const dx = l.x - clickedLawyer.x;
+                    const dy = Math.abs(l.y - clickedLawyer.y);
+
+                    // Must be in front and close
+                    if (clickedLawyer.direction > 0) {
+                        return dx > 0 && dx < 50 && dy < 30;
+                    } else {
+                        return dx < 0 && dx > -50 && dy < 30;
+                    }
+                });
+
+                if (targetLawyer) {
+                    targetLawyer.state = 'dead';
+                    stabCount--;
+                    stabsUsed++;
+                    document.getElementById('stab-count').textContent = stabCount;
+
+                    // Dramatic effect
+                    playSound(200, 0.3, 'sawtooth');
+                    for (let i = 0; i < 20; i++) {
+                        particles.push({
+                            x: targetLawyer.x + targetLawyer.width/2,
+                            y: targetLawyer.y + targetLawyer.height/2,
+                            vx: (Math.random() - 0.5) * 8,
+                            vy: (Math.random() - 0.5) * 8,
+                            life: 30,
+                            color: i % 2 === 0 ? '#ff0000' : '#ffd700'
+                        });
+                    }
+
+                    // Clicking lawyer gets a speed boost
+                    clickedLawyer.x += clickedLawyer.direction * 20;
+
+                    checkLoseCondition();
+                } else {
+                    // No target - play error sound
+                    playSound(150, 0.1);
+                }
+            }
+        }
+
+        // Event listeners
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            handleLawyerClick(x, y);
+        });
+
+        document.getElementById('btn-build').addEventListener('click', () => {
+            selectedTool = selectedTool === 'build' ? null : 'build';
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('selected'));
+            if (selectedTool === 'build') {
+                document.getElementById('btn-build').classList.add('selected');
+            }
+        });
+
+        document.getElementById('btn-backstab').addEventListener('click', () => {
+            selectedTool = selectedTool === 'backstab' ? null : 'backstab';
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('selected'));
+            if (selectedTool === 'backstab') {
+                document.getElementById('btn-backstab').classList.add('selected');
+            }
+        });
+
+        document.getElementById('btn-speed').addEventListener('click', () => {
+            gameSpeed = gameSpeed === 1 ? 2 : (gameSpeed === 2 ? 3 : 1);
+            document.querySelector('#btn-speed .count').textContent = 'x' + gameSpeed;
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'b' || e.key === 'B') {
+                document.getElementById('btn-build').click();
+            } else if (e.key === 's' || e.key === 'S') {
+                document.getElementById('btn-backstab').click();
+            } else if (e.key === ' ') {
+                e.preventDefault();
+                document.getElementById('btn-speed').click();
+            } else if (e.key === 'Enter') {
+                if (gameState === 'title') {
+                    startGame();
+                } else if (gameState === 'won' || gameState === 'lost') {
+                    startGame();
+                }
+            }
+        });
+
+        // Start game
+        function startGame() {
+            document.getElementById('title-screen').style.display = 'none';
+            document.getElementById('win-screen').style.display = 'none';
+            document.getElementById('lose-screen').style.display = 'none';
+            gameState = 'playing';
+            initGame();
+
+            // Resume audio context if suspended
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        document.getElementById('start-btn').addEventListener('click', startGame);
+        document.getElementById('replay-btn').addEventListener('click', startGame);
+        document.getElementById('retry-btn').addEventListener('click', startGame);
+
+        // Start game loop
+        initGame();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
